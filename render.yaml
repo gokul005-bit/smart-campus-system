@@ -1,0 +1,26 @@
+services:
+  # Node.js Backend API
+  - type: web
+    name: smartcampus-backend
+    env: node
+    buildCommand: npm install && npx prisma generate
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18.18.0
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AI_SERVICE_URL
+        value: http://smartcampus-ai:8000/predict # Will update after AI deploys
+    
+  # Python FastAPI AI Service
+  - type: web
+    name: smartcampus-ai
+    env: python
+    buildCommand: pip install -r requirements.txt && python train.py
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
