@@ -3,7 +3,7 @@ services:
   - type: web
     name: smartcampus-backend
     env: node
-    buildCommand: npm install && npx prisma generate
+    buildCommand: npm install && node node_modules/prisma/build/index.js generate && node node_modules/prisma/build/index.js db push --accept-data-loss
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
