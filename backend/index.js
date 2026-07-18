@@ -4,16 +4,15 @@ const { execSync } = require('child_process');
 if (process.env.RENDER === 'true' || !_fs.existsSync(__dirname + '/.setup_done')) {
   try {
     console.log("\n=============================================");
-    console.log("   GENERATING PRISMA CLIENT & CONFIGURING DB ");
+    console.log("          CONFIGURING DATABASE TABLES        ");
     console.log("=============================================\n");
-    execSync('node node_modules/prisma/build/index.js generate', { stdio: 'inherit', cwd: __dirname, shell: true });
     execSync('node node_modules/prisma/build/index.js db push --accept-data-loss', { stdio: 'inherit', cwd: __dirname, shell: true });
     _fs.writeFileSync(__dirname + '/.setup_done', 'true');
     console.log("\n=============================================");
-    console.log("    DATABASE & CLIENT SUCCESSFULLY GENERATED! ");
+    console.log("        DATABASE SUCCESSFULLY CONFIGURED!    ");
     console.log("=============================================\n");
   } catch(e) {
-    console.error("Auto-fix error during start-time DB generation:", e.message);
+    console.error("Auto-fix error during start-time DB configuration:", e.message);
   }
 }
 
@@ -97,26 +96,17 @@ app.get('/api/setup-db', async (req, res) => {
     const { exec } = require('child_process');
     console.log("On-demand DB setup triggered");
     
-    // First generate the client
-    exec('node node_modules/prisma/build/index.js generate', { cwd: __dirname }, (genErr, genStdout, genStderr) => {
-      if (genErr) {
-        console.error("On-demand generate failed:", genErr.message);
-        return res.status(500).json({ error: "Client generation failed: " + genErr.message, stderr: genStderr });
+    // Push the schema
+    exec('node node_modules/prisma/build/index.js db push --accept-data-loss', { cwd: __dirname }, (pushErr, pushStdout, pushStderr) => {
+      if (pushErr) {
+        console.error("On-demand db push failed:", pushErr.message);
+        return res.status(500).json({ error: "Database push failed: " + pushErr.message, stderr: pushStderr });
       }
       
-      // Then push the schema
-      exec('node node_modules/prisma/build/index.js db push --accept-data-loss', { cwd: __dirname }, (pushErr, pushStdout, pushStderr) => {
-        if (pushErr) {
-          console.error("On-demand db push failed:", pushErr.message);
-          return res.status(500).json({ error: "Database push failed: " + pushErr.message, stderr: pushStderr });
-        }
-        
-        console.log("On-demand DB setup succeeded");
-        res.json({
-          message: "Database & Prisma Client successfully initialized at runtime!",
-          generateOutput: genStdout,
-          dbPushOutput: pushStdout
-        });
+      console.log("On-demand DB setup succeeded");
+      res.json({
+        message: "Database successfully configured at runtime!",
+        dbPushOutput: pushStdout
       });
     });
   } catch (error) {
