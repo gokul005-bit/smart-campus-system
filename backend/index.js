@@ -1,7 +1,7 @@
 const _fs = require('fs');
 const { execSync } = require('child_process');
 
-if (!_fs.existsSync(__dirname + '/.setup_done')) {
+if (process.env.RENDER === 'true' || !_fs.existsSync(__dirname + '/.setup_done')) {
   try {
     console.log("\n=============================================");
     console.log("   GENERATING PRISMA CLIENT & CONFIGURING DB ");
