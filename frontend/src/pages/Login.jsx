@@ -15,8 +15,8 @@ export default function Login() {
       const API_URL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : 'http://localhost:5000/api';
       const res = await axios.post(`${API_URL}/auth/login`, { email, password });
       localStorage.setItem('token', res.data.token);
-      localStorage.setItem('role', res.data.role);
-      navigate(res.data.role === 'ADMIN' ? '/admin' : '/dashboard');
+      localStorage.setItem('role', res.data.user.role);
+      navigate(res.data.user.role === 'ADMIN' ? '/admin' : '/dashboard');
       window.location.reload(); // Hard reload to mount layout
     } catch (err) {
       setError(err.response?.data?.error || 'Login failed');

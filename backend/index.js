@@ -223,13 +223,40 @@ app.get('/api/analytics', async (req, res) => {
     const inProgressIssues = await prisma.issue.count({ where: { status: 'In Progress' } });
     const resolvedIssues = await prisma.issue.count({ where: { status: 'Resolved' } });
 
-    res.json({ totalIssues, openIssues, inProgressIssues, resolvedIssues });
+    res.json({
+      total: totalIssues,
+      pending: openIssues + inProgressIssues,
+      resolved: resolvedIssues,
+      totalIssues,
+      openIssues,
+      inProgressIssues,
+      resolvedIssues
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- AI SERVICE ROUTE ---
+// --- AI SERVICE ROUTES ---
+
+app.get('/api/ai-insights', authMiddleware, async (req, res) => {
+  try {
+    const issues = await prisma.issue.findMany({
+      where: { status: { not: 'Archived' } }
+    });
+    const formattedIssues = issues.map(i => ({
+      title: i.title,
+      category: i.category,
+      priority: i.priority
+    }));
+
+    const analyzeUrl = AI_SERVICE_URL.replace('/predict', '/analyze');
+    const response = await axios.post(analyzeUrl, { issues: formattedIssues });
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ error: 'AI analysis failed: ' + err.message });
+  }
+});
 
 app.post('/api/ai-insights', async (req, res) => {
   try {
