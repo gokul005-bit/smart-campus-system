@@ -39,8 +39,8 @@ const prisma = new PrismaClient();
 
 async function seedAdmin() {
   try {
-    const userCount = await prisma.user.count();
-    if (userCount === 0) {
+    const adminExists = await prisma.user.findUnique({ where: { email: 'admin' } });
+    if (!adminExists) {
       console.log("Seeding default admin user...");
       const hashedPassword = await bcrypt.hash('admin', 10);
       await prisma.user.create({
@@ -52,8 +52,22 @@ async function seedAdmin() {
       });
       console.log("Default admin user created successfully!");
     }
+
+    const studentExists = await prisma.user.findUnique({ where: { email: 'student' } });
+    if (!studentExists) {
+      console.log("Seeding default student user...");
+      const hashedPassword = await bcrypt.hash('student', 10);
+      await prisma.user.create({
+        data: {
+          email: 'student',
+          password: hashedPassword,
+          role: 'STUDENT'
+        }
+      });
+      console.log("Default student user created successfully!");
+    }
   } catch (err) {
-    console.error("Failed to seed default admin user:", err.message);
+    console.error("Failed to seed default users:", err.message);
   }
 }
 seedAdmin();
