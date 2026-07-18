@@ -4,16 +4,16 @@ const { execSync } = require('child_process');
 if (!_fs.existsSync(__dirname + '/.setup_done')) {
   try {
     console.log("\n=============================================");
-    console.log("   AUTO-CONFIGURING LOCAL SQLITE DATABASE    ");
+    console.log("   GENERATING PRISMA CLIENT & CONFIGURING DB ");
     console.log("=============================================\n");
-    execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', cwd: __dirname, shell: true });
-    execSync('npx prisma generate', { stdio: 'inherit', cwd: __dirname, shell: true });
+    execSync('node node_modules/prisma/build/index.js generate', { stdio: 'inherit', cwd: __dirname, shell: true });
+    execSync('node node_modules/prisma/build/index.js db push --accept-data-loss', { stdio: 'inherit', cwd: __dirname, shell: true });
     _fs.writeFileSync(__dirname + '/.setup_done', 'true');
     console.log("\n=============================================");
-    console.log("    DATABASE SUCCESSFULLY GENERATED!         ");
+    console.log("    DATABASE & CLIENT SUCCESSFULLY GENERATED! ");
     console.log("=============================================\n");
   } catch(e) {
-    console.error("Auto-fix error:", e.message);
+    console.error("Auto-fix error during start-time DB generation:", e.message);
   }
 }
 
@@ -29,7 +29,6 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
@@ -60,7 +59,6 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: storage });
-
 
 const PORT = process.env.PORT || 5000;
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://127.0.0.1:8000/predict';
@@ -93,25 +91,55 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
+// --- DATABASE INITIALIZATION ROUTE (ON-DEMAND RUNTIME RUN) ---
+app.get('/api/setup-db', async (req, res) => {
+  try {
+    const { exec } = require('child_process');
+    console.log("On-demand DB setup triggered");
+    
+    // First generate the client
+    exec('node node_modules/prisma/build/index.js generate', { cwd: __dirname }, (genErr, genStdout, genStderr) => {
+      if (genErr) {
+        console.error("On-demand generate failed:", genErr.message);
+        return res.status(500).json({ error: "Client generation failed: " + genErr.message, stderr: genStderr });
+      }
+      
+      // Then push the schema
+      exec('node node_modules/prisma/build/index.js db push --accept-data-loss', { cwd: __dirname }, (pushErr, pushStdout, pushStderr) => {
+        if (pushErr) {
+          console.error("On-demand db push failed:", pushErr.message);
+          return res.status(500).json({ error: "Database push failed: " + pushErr.message, stderr: pushStderr });
+        }
+        
+        console.log("On-demand DB setup succeeded");
+        res.json({
+          message: "Database & Prisma Client successfully initialized at runtime!",
+          generateOutput: genStdout,
+          dbPushOutput: pushStdout
+        });
+      });
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- AUTHENTICATION ROUTES ---
 
 app.post('/api/auth/register', authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Only admins can register students' });
     const { email, password, role } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
-
+    
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) return res.status(400).json({ error: 'User already exists' });
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const user = await prisma.user.create({
-      data: { email, password: hashedPassword, role: role || 'STUDENT' }
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = await prisma.user.create({
+      data: { email, password: hashedPassword, role }
     });
-
-    res.status(201).json({ message: 'User created' });
+    
+    res.status(201).json({ message: 'User registered successfully', userId: newUser.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -120,141 +148,121 @@ app.post('/api/auth/register', authMiddleware, async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    // Hardcoded Admin Logic
-    if (email === 'admin' && password === 'admin') {
-      const token = jwt.sign({ id: 0, email: 'admin', role: 'ADMIN' }, JWT_SECRET, { expiresIn: '1d' });
-      return res.json({ token, role: 'ADMIN', email: 'admin' });
-    }
-
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return res.status(400).json({ error: 'Student ID not found' });
-
-    const validPass = await bcrypt.compare(password, user.password);
-    if (!validPass) return res.status(400).json({ error: 'Invalid password' });
-
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
-    res.json({ token, role: user.role, email: user.email });
+    if (!user) return res.status(400).json({ error: 'Invalid credentials' });
+    
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
+    
+    const token = jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+    res.json({ token, user: { email: user.email, role: user.role } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// --- ISSUE ROUTES ---
+// --- ISSUES ROUTES ---
 
-app.post('/api/issues', authMiddleware, upload.single('image'), async (req, res) => {
+app.post('/api/issues', upload.single('evidence'), async (req, res) => {
   try {
-    const { title, description, location } = req.body;
-    if (!title || !description) return res.status(400).json({ error: 'Missing fields' });
-
-    let category = 'Other';
-    try {
-      const aiResponse = await axios.post(AI_SERVICE_URL, { description: title + " " + description });
-      category = aiResponse.data.category;
-    } catch (aiError) {
-      console.error('AI Error:', aiError.message);
-    }
-
+    const { title, description, category, latitude, longitude } = req.body;
+    const evidencePath = req.file ? `/uploads/${req.file.filename}` : null;
     const priority = determinePriority(title, description);
-    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
-    const newIssue = await prisma.issue.create({
+    const issue = await prisma.issue.create({
       data: {
         title,
         description,
-        location: location || 'Unknown',
         category,
         priority,
-        status: 'Open',
-        imageUrl,
-        userId: req.user.id
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
+        evidence: evidencePath
       }
     });
 
-    // Broadcast new issue to all connected dashboards
-    io.emit('new_issue', newIssue);
-
-    res.status(201).json(newIssue);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    io.emit('issue-created', issue);
+    res.status(201).json(issue);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/issues', authMiddleware, async (req, res) => {
+app.get('/api/issues', async (req, res) => {
   try {
-    const whereClause = req.user.role === 'ADMIN' ? {} : { userId: req.user.id };
-    const issues = await prisma.issue.findMany({ where: whereClause, orderBy: { createdAt: 'desc' } });
+    const issues = await prisma.issue.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
     res.json(issues);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
 app.put('/api/issues/:id', authMiddleware, async (req, res) => {
   try {
-    if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
-    const { status } = req.body;
-
+    const { status, priority, category } = req.body;
     const updatedIssue = await prisma.issue.update({
-      where: { id: parseInt(req.params.id) },
-      data: { status }
+      where: { id: req.params.id },
+      data: { status, priority, category }
     });
 
-    // Broadcast issue status change to all connected clients
-    io.emit('issue_updated', updatedIssue);
-
+    io.emit('issue-updated', updatedIssue);
     res.json(updatedIssue);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-// --- ANALYTICS & AI ---
-
-app.get('/api/analytics', authMiddleware, async (req, res) => {
+app.delete('/api/issues/:id', authMiddleware, async (req, res) => {
   try {
-    const total = await prisma.issue.count({ where: { status: { not: 'Archived' } } });
-    const resolved = await prisma.issue.count({ where: { status: 'Resolved' } });
-    const pending = total - resolved;
-    const categoryCounts = await prisma.issue.groupBy({
-      by: ['category'],
-      where: { status: { not: 'Archived' } },
-      _count: { category: true }
-    });
-    res.json({ total, resolved, pending, byCategory: categoryCounts.map(c => ({ category: c.category, count: c._count.category })) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    await prisma.issue.delete({ where: { id: req.params.id } });
+    io.emit('issue-deleted', { id: req.params.id });
+    res.json({ message: 'Issue deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-app.get('/api/ai-insights', authMiddleware, async (req, res) => {
+// --- ANALYTICS ROUTES ---
+
+app.get('/api/analytics', async (req, res) => {
   try {
-    if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only' });
+    const totalIssues = await prisma.issue.count();
+    const openIssues = await prisma.issue.count({ where: { status: 'Open' } });
+    const inProgressIssues = await prisma.issue.count({ where: { status: 'In Progress' } });
+    const resolvedIssues = await prisma.issue.count({ where: { status: 'Resolved' } });
 
-    // Fetch all true active issues to summarize (excluding resolved and archived ones)
-    const openIssues = await prisma.issue.findMany({ where: { status: { notIn: ['Resolved', 'Archived'] } } });
-
-    let aiInsight = "No specific AI insights currently available.";
-
-    // Send standard summary directly over to a new specialized AI endpoint, 
-    // or just calculate the basic heuristics if the ML service is simple.
-    // For realistic viva demo, since our AI is a text classifier, we will build a basic NLP logic text generator directly here,
-    // OR we can query the Python service. I will build an endpoint in FastAPI and query it!
-
-    try {
-      const summaryPayload = { issues: openIssues.map(i => ({ title: i.title, category: i.category, priority: i.priority })) };
-      const aiResponse = await axios.post(`${AI_SERVICE_URL.replace('/predict', '/analyze')}`, summaryPayload);
-      aiInsight = aiResponse.data.insight;
-    } catch (aiError) {
-      console.error('Insights Error:', aiError.message);
-      aiInsight = "System has detected multiple open records but AI analysis module is unavailable.";
-    }
-
-    res.json({ insight: aiInsight });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.json({ totalIssues, openIssues, inProgressIssues, resolvedIssues });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
+
+// --- AI SERVICE ROUTE ---
+
+app.post('/api/ai-insights', async (req, res) => {
+  try {
+    const { title, description } = req.body;
+    const response = await axios.post(AI_SERVICE_URL, { title, description });
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ error: 'AI prediction failed: ' + err.message });
+  }
+});
+
+// WebSocket connection
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
 
 server.listen(PORT, () => {
   console.log(`Backend API running on http://localhost:${PORT}`);
