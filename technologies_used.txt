@@ -1,0 +1,75 @@
+Smart Campus System - Technologies Used
+=======================================
+
+This project is structured as a modern, full-stack application composed of three main services: Frontend, Backend, and an AI Service. Below is a comprehensive list of all the technologies, frameworks, and packages (even small ones) used across the entire system.
+
+1. FRONTEND (React + Vite)
+--------------------------
+Core Frameworks & Build Tools:
+- React (v19.x) - UI Library
+- React DOM - Rendering for the web
+- Vite (v8.x) - Next-generation frontend build tool and development server
+
+Routing & Integration:
+- React Router DOM - Client-side routing
+
+Styling & UI Experience:
+- Tailwind CSS (v3.x) - Utility-first CSS framework
+- PostCSS & Autoprefixer - CSS processing and browser compatibility
+- Framer Motion - Animation library for fluid UI transitions
+- Recharts - Composable charting library for dashboard visualizations
+- Lucide React - Icon library
+
+Network & Communication:
+- Axios - Promise-based HTTP client for API requests
+- Socket.io-client - Real-time client for WebSocket communication
+
+Development & Tooling:
+- ESLint (with React Hooks & Refresh plugins) - Javascript/Typescript linting
+- Globals - Global identifiers for ESLint
+
+
+2. BACKEND (Node.js + Express)
+------------------------------
+Core Frameworks & Runtime:
+- Node.js - JavaScript runtime environment
+- Express - Fast, unopinionated web framework for Node.js
+
+Database & ORM:
+- Prisma (@prisma/client & prisma CLI) - Next-generation Node.js and TypeScript ORM
+- PostgreSQL (Production/Supabase context) - Relational Database 
+
+Authentication & Security:
+- bcryptjs - Library for hashing and securing passwords
+- jsonwebtoken (JWT) - Standard for securely transmitting information between parties as a JSON object
+- cors - Middleware to enable Cross-Origin Resource Sharing
+
+File Uploads & Utilities:
+- Multer - Middleware for handling `multipart/form-data` (file uploads for image evidence)
+- Dotenv - Loads environment variables from `.env` files
+- Axios - For making outgoing HTTPS requests if needed
+
+Network & Communication:
+- Socket.io - Real-time, bidirectional, and event-based communication server
+
+Development & Tooling:
+- Nodemon - Utility that automatically restarts the node app upon file changes
+
+
+3. AI SERVICE (Python)
+----------------------
+Core Frameworks:
+- FastAPI - High-performance web framework for building APIs with Python
+- Uvicorn - ASGI web server implementation for Python (used to run FastAPI)
+
+Machine Learning & Data Processing:
+- scikit-learn - Machine learning library (used for issue prediction model generation & evaluation)
+- pandas - Data manipulation and analysis library
+- pydantic - Data validation and settings management using Python type annotations
+- pickle (built-in) - Used for model serialization (model.pkl)
+
+
+4. DEPLOYMENT & INFRASTRUCTURE
+------------------------------
+- Render - Cloud application hosting (configured via render.yaml for automated deployments of Web Services)
+- Supabase (used previously/contextually) - Backend-as-a-Service for PostgreSQL hosting

@@ -1,0 +1,12 @@
+node_modules/*
+!node_modules/@prisma/client/
+!node_modules/@prisma/engines/
+!node_modules/prisma/
+!node_modules/.prisma/
+*.log
+.env
+.setup_done
+backend/node_modules/ 
+.env 
+backend/node_modules/ 
+.env 
