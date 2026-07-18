@@ -37,6 +37,27 @@ const io = new Server(server, {
 
 const prisma = new PrismaClient();
 
+async function seedAdmin() {
+  try {
+    const userCount = await prisma.user.count();
+    if (userCount === 0) {
+      console.log("Seeding default admin user...");
+      const hashedPassword = await bcrypt.hash('admin', 10);
+      await prisma.user.create({
+        data: {
+          email: 'admin',
+          password: hashedPassword,
+          role: 'ADMIN'
+        }
+      });
+      console.log("Default admin user created successfully!");
+    }
+  } catch (err) {
+    console.error("Failed to seed default admin user:", err.message);
+  }
+}
+seedAdmin();
+
 app.use(cors());
 app.use(express.json());
 
