@@ -2,7 +2,7 @@ services:
   - type: web
     name: smartcampus-backend
     env: node
-    buildCommand: npm install
+    buildCommand: rm -rf node_modules && PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x npm install
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
